@@ -22,6 +22,7 @@ from megatron.core.enums import ModelType
 
 
 from megatron.training import get_args, get_timers, pretrain, print_rank_0
+from megatron.training.arguments import core_transformer_config_from_args
 from megatron.training.utils import (
     average_losses_across_data_parallel_group,
     get_batch_on_this_cp_rank,
@@ -31,19 +32,18 @@ from megatron.training.utils import (
 
 from megatron_patch.arguments import get_patch_args
 from megatron_patch.tokenizer import build_tokenizer, get_tokenizer
+from megatron_patch.model.qwen2.transformer_config import Qwen2TransformerConfig
 from megatron_patch.data import build_pretrain_dataset_from_original
 
 from megatron_patch.data.utils import get_batch_on_this_tp_rank_original, get_batch_on_this_tp_rank_idxmap_sft
-from megatron_patch.arguments import core_transformer_config_from_args
+from megatron_patch.model.qwen2.layer_specs import get_gpt_layer_local_spec
 
-# from megatron_patch.model.llama3.layer_specs import get_gpt_layer_with_transformer_engine_spec
-# from megatron_patch.model.llama3.model import GPTModel
-from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_with_transformer_engine_spec
+# from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_with_transformer_engine_spec
+from megatron_patch.model.gpt.gpt_layer_specs import get_gpt_layer_with_transformer_engine_spec
 from megatron.core.models.gpt import GPTModel
 from megatron.core.num_microbatches_calculator import get_num_microbatches
 
 torch._dynamo.config.suppress_errors = True
-step=0
 def model_provider(
     pre_process=True, post_process=True
 ) -> GPTModel:
@@ -62,27 +62,29 @@ def model_provider(
     args = get_args()
     build_tokenizer(args)
 
-    # Experimental loading arguments from yaml
-    config = core_transformer_config_from_args(args)
-    if not args.use_legacy_models:
-        print_rank_0("building llama3 model in TE...")
-        transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm)
-
-        model = GPTModel(
-            config=config,
-            transformer_layer_spec=transformer_layer_spec,
-            vocab_size=args.padded_vocab_size,
-            max_sequence_length=args.max_position_embeddings,
-            pre_process=pre_process,
-            post_process=post_process,
-            fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
-            parallel_output=True,
-            share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
-            position_embedding_type=args.position_embedding_type,
-            rotary_percent=args.rotary_percent,
-            rotary_base=args.rotary_base,
-            seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
-        )
+    config = core_transformer_config_from_args(args, Qwen2TransformerConfig)
+    if args.transformer_impl == "transformer_engine":
+        print_rank_0("build model in TE")
+        transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+    else:
+        print_rank_0("build model in mcore")
+        transformer_layer_spec = get_gpt_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        
+    model = GPTModel(
+        config=config,
+        transformer_layer_spec=transformer_layer_spec,
+        vocab_size=args.padded_vocab_size,
+        max_sequence_length=args.max_position_embeddings,
+        pre_process=pre_process,
+        post_process=post_process,
+        fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
+        parallel_output=True,
+        share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
+        position_embedding_type=args.position_embedding_type,
+        rotary_percent=args.rotary_percent,
+        rotary_base=args.rotary_base,
+        seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
+    )
     return model
 
 
@@ -101,19 +103,24 @@ def get_batch(data_iterator):
         if args.train_mode == "pretrain":
             raise ValueError('The LLama-SFT-Raw dataset should only be used for finetuning!')
         batch = get_batch_on_this_tp_rank_original(data_iterator)
+        num_seqs = batch.pop('num_seqs')
         # slice batch along sequence dimension for context parallelism
         batch = get_batch_on_this_cp_rank(batch)
-        global step
-        if step == 0:
-            print_rank_0(tokenizer.tokenizer.decode(batch['tokens'][0,:10900]))
-            step += 1
-        return tuple([*batch.values(), None])
+        return (
+            batch['tokens'],
+            batch['labels'],
+            batch['loss_mask'],
+            batch['attention_mask'],
+            batch['position_ids'],
+            num_seqs,
+            None
+        )
     elif "-Idxmap" in args.dataset:
         # get batches based on the TP rank you are on
         if args.train_mode == "pretrain":
             batch = get_batch_on_this_tp_rank(data_iterator)
         else:
-            batch = get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=True)
+            batch = get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=False)
 
         packed_seq_params = None
         if args.reset_position_ids:
@@ -124,6 +131,8 @@ def get_batch(data_iterator):
                 position_ids = position_ids[0] # shape: [seq_length]
                 start_indices = (position_ids == 0).nonzero(as_tuple=True)[0]
                 seqlens = start_indices[1:] - start_indices[:-1]
+                if seqlens.shape != torch.Size([0]):
+                    cu_seqlens[1:-1] = torch.cumsum(seqlens, dim=0)
                 # NOTE: cu_seqlens: [0, A1, A1+A2, A1+A2+A3, ..., seq_len]
                 cu_seqlens = torch.zeros(start_indices.shape[0] + 1, device=position_ids.device, dtype=torch.int)
                 cu_seqlens[1:-1] = torch.cumsum(seqlens, dim=0)
@@ -137,12 +146,18 @@ def get_batch(data_iterator):
         if packed_seq_params is not None and args.context_parallel_size > 1:
             raise ValueError('Sequence Packing is not supported when CP>1 !')
         # slice batch along sequence dimension for context parallelism
+        num_seqs = batch.pop('num_seqs', None)
         batch = get_batch_on_this_cp_rank(batch)
 
-        if args.train_mode == "pretrain":
-            return tuple([*batch.values(), None, packed_seq_params])
-        else:
-            return tuple([*batch.values(), packed_seq_params])
+        return (
+            batch['tokens'],
+            batch['labels'],
+            batch['loss_mask'],
+            batch['attention_mask'],
+            batch['position_ids'],
+            num_seqs,
+            packed_seq_params
+        )
     else:
         raise ValueError("please set correct --dataset ")
 
@@ -201,7 +216,7 @@ def per_token_loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
             f"Rank {global_rank}: found NaN in local forward loss calculation. "
             f"Device: {torch.cuda.current_device()}, node: {os.uname()[1]}"
         )
-    return loss, num_tokens.to(torch.int).item(), {"lm loss": (loss.item(), num_tokens.item())}
+    return loss, num_tokens.to(torch.int), {"lm loss": (loss.item(), num_tokens.item())}
 
 def forward_step(data_iterator, model: GPTModel):
     """Forward training step.
@@ -214,7 +229,7 @@ def forward_step(data_iterator, model: GPTModel):
     args = get_args()
     # Get the batch.
     timers("batch-generator", log_level=2).start()
-    tokens, labels, loss_mask, attention_mask, position_ids, _, packed_seq_params = get_batch(data_iterator)
+    tokens, labels, loss_mask, attention_mask, position_ids, num_seqs, packed_seq_params = get_batch(data_iterator)
     timers("batch-generator").stop()
     output_tensor = model(tokens, position_ids, attention_mask, labels=labels, packed_seq_params=packed_seq_params)
     if args.calculate_per_token_loss:

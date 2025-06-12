@@ -1,18 +1,17 @@
 #!/bin/bash
 set -e
 
+ENV=dsw
 ROOT_DIR=$( dirname -- "$( readlink -f -- "$0"; )"; )
+ROOT_DIR=${ROOT_DIR}/../../ #v5000_megatron
 echo $ROOT_DIR
 
-WORLD_SIZE=1
-TQ_GPU_NUM=8
-MASTER_ADDR=${MASTER_ADDR:-127.0.0.1}
-MASTER_PORT=${MASTER_PORT:-9988}
-
-MODEL_SIZE=8B
+MEGATRON_PATH=/workspace/Megatron-LM/
+export PYTHONPATH=${MEGATRON_PATH}:${ROOT_DIR}
+MODEL_SIZE=${MODEL_SIZE:-8B}
 BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=${GLOBAL_BATCH_SIZE:-4}
-LR=1e-5
+LR=${LR:-1e-5}
 MIN_LR=1e-6
 SEQ_LEN=${SEQ_LEN:-32768}
 PAD_LEN=${SEQ_LEN}
@@ -27,10 +26,9 @@ TASK=sft # pretrain/sft
 DATASET_TYPE=raw # mmap/raw
 SAVE_INTERVAL=50000
 # PRETRAIN_CHECKPOINT_PATH=${ROOT_DIR}/../../../model/Meta-Llama-3-8B
-PRETRAIN_CHECKPOINT_PATH=/nas/qianhao/models/llama3-8b-mcore-tp${TP}-pp${PP}
-# PRETRAIN_CHECKPOINT_PATH=/mnt/v5000-megatron/v5000-megatron/ckpt/Meta-Llama-3-8B-mcore-TP-${TP}-PP-${PP}
-DATASET_PATH=/nas/qianhao/data/sample_long_sft_32k_48M.json
-VALID_DATASET_PATH=${DATASET_PATH}
+PRETRAIN_CHECKPOINT_PATH=${CKPT_PATH}
+DATASET_PATH=${DATA_PATH}
+VALID_DATASET_PATH=${DATA_PATH}
 if [[ -z ${OUTPUT_DIR} ]];then
     OUTPUT_BASEPATH=${ROOT_DIR}/output
 else
@@ -52,13 +50,28 @@ MOE=false
 SAVE_CKPT=true
 RMS_NORM_EPS=1e-5
 
-MEGATRON_PATH=/workspace/Megatron-LM
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export NCCL_IB_GID_INDEX=3
+if [ $ENV = dsw ]; then
+
+    export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
+    GPUS_PER_NODE=`echo "$CUDA_VISIBLE_DEVICES" | awk -F, '{print NF}'`
+    # Change for multinode config
+    MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
+    NODE_RANK=${RANK:-0}
+    if [ "$NODE_RANK" -eq 0 ] && [ $MASTER_ADDR = "localhost" ]; then
+            MASTER_ADDR=${POD_NAME}
+    fi
+    echo "MASTER_ADDR is ${MASTER_ADDR}"
+    NNODES=${WORLD_SIZE:-1}
+    GPUS_PER_NODE=${TQ_GPU_NUM:-8}
+    MASTER_PORT=${MASTER_PORT:-9988}
+
+elif [ $ENV = dlc ]; then
 NNODES=${WORLD_SIZE}
 NODE_RANK=${RANK:-0}
 GPUS_PER_NODE=${TQ_GPU_NUM}
+fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
@@ -221,8 +234,8 @@ fi
 
 if [ $FL = true ]; then
     flash_options=" \
-		    --use-flash-attn \
-		    --attention-backend flash"
+		    --use-flash-attn
+                    --attention-backend flash"
 
 elif [ $FL = false ]; then
     flash_options=" \
@@ -373,7 +386,6 @@ fi
         # --train-samples ${TRAIN_SAMPLES} \
 megatron_options="  \
         --lr ${LR} \
-        --min-lr ${MIN_LR} \
         --lr-decay-style ${LR_DECAY_STYLE} \
         --adam-beta1 0.9 \
         --adam-beta2 0.95 \
@@ -423,12 +435,12 @@ megatron_options="  \
         --log-mfu \
         --mfu-base-value 312 \
         "
-
+# --min-lr ${MIN_LR} \
 if [[ -z ${LOG_FILE} ]];then
   LOG_FILE=${LOG_DIR}/${LOG_NAME}
 fi
 
-run_cmd="torchrun $DISTRIBUTED_ARGS train.py
+run_cmd="torchrun $DISTRIBUTED_ARGS run_llama.py
  ${megatron_options} \
  ${save_ckpt_options} \
  ${pr_options} \
