@@ -21,3 +21,6 @@ python ${MEGATRON_PATH}/tools/checkpoint/convert.py \
   --model-size ${MODEL_TYPE} \
   --make-vocab-size-divisible-by 16 \
   --max-queue-size 8
+cp ${HF_FORMAT_DIR}/tokenizer.json ${MEGATRON_FORMAT_DIR}/
+cp ${HF_FORMAT_DIR}/tokenizer_config.json ${MEGATRON_FORMAT_DIR}/
+cp ${HF_FORMAT_DIR}/config.json ${MEGATRON_FORMAT_DIR}/
