@@ -4,15 +4,16 @@ set -e
 ROOT_DIR=$( dirname -- "$( readlink -f -- "$0"; )"; )
 echo $ROOT_DIR
 
-WORLD_SIZE=1
-TQ_GPU_NUM=8
+WORLD_SIZE=${WORLD_SIZE:-1}
+TQ_GPU_NUM=${NGPUS:-8}
 MASTER_ADDR=${MASTER_ADDR:-127.0.0.1}
 MASTER_PORT=${MASTER_PORT:-9988}
 
-MODEL_SIZE=8B
+MODEL_TYPE=${MODEL_TYPE:-llama3}
+MODEL_SIZE=${MODEL_SIZE:-8B}
 BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=${GLOBAL_BATCH_SIZE:-4}
-LR=1e-5
+LR=${LR:-2e-5}
 MIN_LR=1e-6
 SEQ_LEN=${SEQ_LEN:-32768}
 PAD_LEN=${SEQ_LEN}
@@ -23,13 +24,11 @@ TP=${TP:-8}
 PP=${PP:-1}
 CP=1
 AC=${AC:-full}
-TASK=sft # pretrain/sft
+TASK=${TASK:-sft} # pretrain/sft
 DATASET_TYPE=raw # mmap/raw
 SAVE_INTERVAL=50000
-# PRETRAIN_CHECKPOINT_PATH=${ROOT_DIR}/../../../model/Meta-Llama-3-8B
-PRETRAIN_CHECKPOINT_PATH=/nas/qianhao/models/llama3-8b-mcore-tp${TP}-pp${PP}
-# PRETRAIN_CHECKPOINT_PATH=/mnt/v5000-megatron/v5000-megatron/ckpt/Meta-Llama-3-8B-mcore-TP-${TP}-PP-${PP}
-DATASET_PATH=/nas/qianhao/data/sample_long_sft_32k_48M.json
+PRETRAIN_CHECKPOINT_PATH=${PRETRAIN_CHECKPOINT_PATH:-"/nas/qianhao/models/llama3-8b-mcore-tp${TP}-pp${PP}"}
+DATASET_PATH=${DATASET_PATH:-"/nas/qianhao/data/sample_long_sft_32k_48M.json"}
 VALID_DATASET_PATH=${DATASET_PATH}
 if [[ -z ${OUTPUT_DIR} ]];then
     OUTPUT_BASEPATH=${ROOT_DIR}/output
@@ -79,7 +78,7 @@ else
             "
 fi
 data_cache_options=" \
-        --data-cache-path $OUTPUT_BASEPATH/llama3_8b/data_cache"
+        --data-cache-path $OUTPUT_BASEPATH/${MODEL_TYPE}_${MODEL_SIZE}/data_cache"
 
 
 if [ $DATASET_TYPE = mmap ]; then
@@ -94,46 +93,168 @@ elif [ $DATASET_TYPE = raw ]; then
         --dataloader-type single \
         --dataset LLama-SFT-Raw "
 fi
+if [ $MODEL_TYPE = llama3 ]; then
 
-if [ $MODEL_SIZE = 0.5B ]; then
+    TOKENIZER=LLama3Tokenizer
+    if [ $MODEL_SIZE = 0.5B ]; then
 
-NUM_LAYERS=24
-HIDDEN_SIZE=896
-NUM_ATTN_HEADS=14
-INTERMEDIATE_SIZE=4864
-NUM_KEY_VALUE_HEADS=2
-MAX_POSITION_EMBEDDINGS=131072
-ROPE_THETA=500000
-gqa_options=" \
+        NUM_LAYERS=24
+        HIDDEN_SIZE=896
+        NUM_ATTN_HEADS=14
+        INTERMEDIATE_SIZE=4864
+        NUM_KEY_VALUE_HEADS=2
+        MAX_POSITION_EMBEDDINGS=131072
+        ROPE_THETA=500000
+        gqa_options=" \
 		    --group-query-attention \
 		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
 
-elif [ $MODEL_SIZE = 8B ]; then
+    elif [ $MODEL_SIZE = 8B ]; then
 
-NUM_LAYERS=32
-HIDDEN_SIZE=4096
-NUM_ATTN_HEADS=32
-INTERMEDIATE_SIZE=14336
-NUM_KEY_VALUE_HEADS=8
-MAX_POSITION_EMBEDDINGS=32768
-ROPE_THETA=500000
-gqa_options=" \
+        NUM_LAYERS=32
+        HIDDEN_SIZE=4096
+        NUM_ATTN_HEADS=32
+        INTERMEDIATE_SIZE=14336
+        NUM_KEY_VALUE_HEADS=8
+        MAX_POSITION_EMBEDDINGS=32768
+        ROPE_THETA=500000
+        gqa_options=" \
 		    --group-query-attention \
 		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
 
-elif [ $MODEL_SIZE = 70B ]; then
+    elif [ $MODEL_SIZE = 70B ]; then
 
-NUM_LAYERS=80
-HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=28672
-NUM_KEY_VALUE_HEADS=8
-MAX_POSITION_EMBEDDINGS=131072
-ROPE_THETA=500000
-gqa_options=" \
+        NUM_LAYERS=80
+        HIDDEN_SIZE=8192
+        NUM_ATTN_HEADS=64
+        INTERMEDIATE_SIZE=28672
+        NUM_KEY_VALUE_HEADS=8
+        MAX_POSITION_EMBEDDINGS=131072
+        ROPE_THETA=500000
+        gqa_options=" \
 		    --group-query-attention \
 		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
 
+    fi
+    tie_option=" \
+         --untie-embeddings-and-output-weights \
+	 "
+elif [ $MODEL_TYPE = qwen2.5 ]; then
+
+    TOKENIZER=Qwen2Tokenizer
+    ROPE_THETA=1000000
+    if [ $MODEL_SIZE = 0.5B ]; then
+
+        NUM_LAYERS=24
+        HIDDEN_SIZE=896
+        NUM_ATTN_HEADS=14
+        INTERMEDIATE_SIZE=4864
+        NUM_KEY_VALUE_HEADS=2
+        MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
+        EXTRA_VOCAB_SIZE=293
+        RMS_NORM_EPS=1e-6
+        gqa_options=" \
+        		    --group-query-attention \
+        		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+        
+        
+        tie_option=""
+        moe_options=" \
+                    "
+        
+        
+    elif [ $MODEL_SIZE = 1.5B ]; then
+        
+        NUM_LAYERS=28
+        HIDDEN_SIZE=1536
+        NUM_ATTN_HEADS=12
+        INTERMEDIATE_SIZE=8960
+        NUM_KEY_VALUE_HEADS=2
+        MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
+        EXTRA_VOCAB_SIZE=293
+        RMS_NORM_EPS=1e-6
+        gqa_options=" \
+        		    --group-query-attention \
+        		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+        
+        tie_option=""
+        moe_options=" \
+                    "
+        
+    elif [ $MODEL_SIZE = 7B ]; then
+        
+        NUM_LAYERS=28
+        HIDDEN_SIZE=3584
+        NUM_ATTN_HEADS=28
+        INTERMEDIATE_SIZE=18944
+        NUM_KEY_VALUE_HEADS=4
+        MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
+        EXTRA_VOCAB_SIZE=421
+        RMS_NORM_EPS=1e-6
+        gqa_options=" \
+        		    --group-query-attention \
+        		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+        
+        moe_options=" \
+                    "
+        tie_option=" \
+                --untie-embeddings-and-output-weights \
+                "
+        
+        
+    elif [ $MODEL_SIZE = 72B ]; then
+        
+        NUM_LAYERS=80
+        HIDDEN_SIZE=8192
+        NUM_ATTN_HEADS=64
+        INTERMEDIATE_SIZE=29568
+        NUM_KEY_VALUE_HEADS=8
+        MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
+        EXTRA_VOCAB_SIZE=421
+        RMS_NORM_EPS=1e-5
+        gqa_options=" \
+        		    --group-query-attention \
+        		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+        
+        moe_options=" \
+                    "
+        tie_option=" \
+                --untie-embeddings-and-output-weights \
+                "
+        
+        
+    elif [ $MODEL_SIZE = A14B ]; then
+        
+        NUM_LAYERS=28
+        HIDDEN_SIZE=3584
+        NUM_ATTN_HEADS=28
+        INTERMEDIATE_SIZE=18944
+        NUM_KEY_VALUE_HEADS=4
+        MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
+        EXTRA_VOCAB_SIZE=293
+        RMS_NORM_EPS=1e-6
+        gqa_options=" \
+        		    --group-query-attention \
+        		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+        
+        NUM_EXPERTS=64
+        NUM_EXPERTS_PER_TOPK=8
+        MOE_INTERMEDIATE_SIZE=2560
+        SHARED_EXPERT_INTERMEDIATE_SIZE=20480
+        
+        moe_options=" \
+                    --moe-router-topk ${NUM_EXPERTS_PER_TOPK} \
+                    --num-experts ${NUM_EXPERTS} \
+                    --expert-model-parallel-size ${EP} \
+                    --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
+                    --shared-moe-ffn-hidden-size ${SHARED_EXPERT_INTERMEDIATE_SIZE} \
+                    --enable-shared-expert"
+        
+        tie_option=" \
+                --untie-embeddings-and-output-weights \
+                "
+        
+    fi
 fi
 
 if [ ${PP} -gt 1 ] && [ ${USE_VIRTUAL_PP} = true ]; then
@@ -331,7 +452,7 @@ TRAIN_ITERS=100
 LR_WARMUP_ITERS=0
 # LR_DECAY_ITERS=${TRAIN_ITERS}
 
-TASK_NAME="mcore-llama3-${MODEL_SIZE}-${TASK}"
+TASK_NAME="mcore-${MODEL_TYPE}-${MODEL_SIZE}-${TASK}"
 DETAIL_TASK_NAME="${TASK_NAME}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-cp-${CP}-virtual_pp-${VIRTUAL_PP}-ac-${AC}-do-${DO}-sp-${SP}"
 CURRENT_TIME=$(date +"%m-%d-%H:%M")
 
@@ -372,17 +493,16 @@ fi
 
         # --train-samples ${TRAIN_SAMPLES} \
 megatron_options="  \
-        --lr ${LR} \
-        --min-lr ${MIN_LR} \
+	--lr ${LR} \
         --lr-decay-style ${LR_DECAY_STYLE} \
         --adam-beta1 0.9 \
         --adam-beta2 0.95 \
         --weight-decay ${WEIGHT_DECAY} \
         --clip-grad 1.0 \
-        --init-method-std 0.006 \
+        --init-method-std 0.008 \
         --attention-dropout 0.0 \
         --hidden-dropout 0.0 \
-        --lr-warmup-fraction 0.02 \
+        --lr-warmup-fraction 0.0 \
         --train-iters ${TRAIN_ITERS} \
         --micro-batch-size ${BATCH_SIZE} \
         --global-batch-size ${GLOBAL_BATCH_SIZE} \
@@ -407,23 +527,28 @@ megatron_options="  \
         --context-parallel-size ${CP} \
         --num-workers 8 \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type LLama3Tokenizer \
+        --patch-tokenizer-type ${TOKENIZER}\
         --swiglu \
         --normalization RMSNorm \
         --norm-epsilon ${RMS_NORM_EPS} \
         --use-rotary-position-embeddings \
         --no-rope-fusion \
         --position-embedding-type rope \
-        --untie-embeddings-and-output-weights \
         --disable-bias-linear \
-        --use-mcore-models \
+        --rotary-percent 1.0 \
         --rotary-base ${ROPE_THETA} \
-        --distributed-timeout-minutes 40 \
-        --calculate-per-token-loss \
+        --rotary-seq-len-interpolation-factor 1 \
+        --no-gradient-accumulation-fusion \
         --log-mfu \
+        --calculate-per-token-loss \
         --mfu-base-value 312 \
-        "
-
+       "
+if [ $MODEL_TYPE = qwen2.5 ]; then
+    megatron_options="${megatron_options} \
+	    --add-qkv-bias \
+	    "
+fi
+echo $megatron_options
 if [[ -z ${LOG_FILE} ]];then
   LOG_FILE=${LOG_DIR}/${LOG_NAME}
 fi
@@ -450,6 +575,7 @@ run_cmd="torchrun $DISTRIBUTED_ARGS train.py
  ${data_cache_options} \
  ${virtual_pp_options} \
  ${swa_options} \
+ ${tie_option} \
  2>&1 | tee ${LOG_FILE}
  "
 echo ${run_cmd}

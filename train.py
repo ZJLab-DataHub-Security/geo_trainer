@@ -43,7 +43,6 @@ from megatron.core.models.gpt import GPTModel
 from megatron.core.num_microbatches_calculator import get_num_microbatches
 
 torch._dynamo.config.suppress_errors = True
-step=0
 def model_provider(
     pre_process=True, post_process=True
 ) -> GPTModel:
@@ -65,7 +64,6 @@ def model_provider(
     # Experimental loading arguments from yaml
     config = core_transformer_config_from_args(args)
     if not args.use_legacy_models:
-        print_rank_0("building llama3 model in TE...")
         transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm)
 
         model = GPTModel(
@@ -103,10 +101,6 @@ def get_batch(data_iterator):
         batch = get_batch_on_this_tp_rank_original(data_iterator)
         # slice batch along sequence dimension for context parallelism
         batch = get_batch_on_this_cp_rank(batch)
-        global step
-        if step == 0:
-            print_rank_0(tokenizer.tokenizer.decode(batch['tokens'][0,:10900]))
-            step += 1
         return tuple([*batch.values(), None])
     elif "-Idxmap" in args.dataset:
         # get batches based on the TP rank you are on

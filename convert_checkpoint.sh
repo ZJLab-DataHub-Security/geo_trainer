@@ -7,6 +7,11 @@ TOKENIZER_MODEL=${HF_FORMAT_DIR}
 MEGATRON_PATH=/workspace/Megatron-LM/
 export PYTHONPATH=${MEGATRON_PATH}
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+if [ $MODEL_TYPE = llama3 ]; then
+  vocab_size=128256
+elif [ $MODEL_TYPE = qwen2.5 ]; then
+  vocab_size=152064
+fi
 python ${MEGATRON_PATH}/tools/checkpoint/convert.py \
   --bf16 \
   --model-type GPT \
@@ -20,7 +25,7 @@ python ${MEGATRON_PATH}/tools/checkpoint/convert.py \
   --tokenizer-model ${TOKENIZER_MODEL} \
   --model-size ${MODEL_TYPE} \
   --make-vocab-size-divisible-by 16 \
+  --true-vocab-size ${vocab_size} \
   --max-queue-size 8
-cp ${HF_FORMAT_DIR}/tokenizer.json ${MEGATRON_FORMAT_DIR}/
-cp ${HF_FORMAT_DIR}/tokenizer_config.json ${MEGATRON_FORMAT_DIR}/
-cp ${HF_FORMAT_DIR}/config.json ${MEGATRON_FORMAT_DIR}/
+cp ${HF_FORMAT_DIR}/*.json ${MEGATRON_FORMAT_DIR}/
+cp ${HF_FORMAT_DIR}/*.txt ${MEGATRON_FORMAT_DIR}/
