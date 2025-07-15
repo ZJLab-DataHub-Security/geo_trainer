@@ -7,6 +7,14 @@ ROOT_DIR=${ROOT_DIR}/../.. #v5000_megatron
 echo $ROOT_DIR
 
 MEGATRON_PATH=/workspace/Megatron-LM/
+USE_TQLM=${USE_TQLM:-false}
+te_spec_options=""
+if [ $USE_TQLM = true ]; then
+    MEGATRON_PATH=/workspace/Megatron-LM-0.11.0/
+    te_spec_options=" \
+	    --te-spec-version tqlm \
+	    --attention-backend flash"
+fi
 export PYTHONPATH=${MEGATRON_PATH}:${ROOT_DIR}
 MODEL_SIZE=7B
 BATCH_SIZE=1
@@ -120,7 +128,7 @@ HIDDEN_SIZE=896
 NUM_ATTN_HEADS=14
 INTERMEDIATE_SIZE=4864
 NUM_KEY_VALUE_HEADS=2
-MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
+MAX_POSITION_EMBEDDINGS=131072
 EXTRA_VOCAB_SIZE=293
 RMS_NORM_EPS=1e-6
 gqa_options=" \
@@ -140,7 +148,7 @@ HIDDEN_SIZE=1536
 NUM_ATTN_HEADS=12
 INTERMEDIATE_SIZE=8960
 NUM_KEY_VALUE_HEADS=2
-MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
+MAX_POSITION_EMBEDDINGS=131072
 EXTRA_VOCAB_SIZE=293
 RMS_NORM_EPS=1e-6
 gqa_options=" \
@@ -158,7 +166,7 @@ HIDDEN_SIZE=3584
 NUM_ATTN_HEADS=28
 INTERMEDIATE_SIZE=18944
 NUM_KEY_VALUE_HEADS=4
-MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
+MAX_POSITION_EMBEDDINGS=131072
 EXTRA_VOCAB_SIZE=421
 RMS_NORM_EPS=1e-6
 gqa_options=" \
@@ -179,7 +187,7 @@ HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=29568
 NUM_KEY_VALUE_HEADS=8
-MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
+MAX_POSITION_EMBEDDINGS=131072
 EXTRA_VOCAB_SIZE=421
 RMS_NORM_EPS=1e-5
 gqa_options=" \
@@ -200,7 +208,7 @@ HIDDEN_SIZE=3584
 NUM_ATTN_HEADS=28
 INTERMEDIATE_SIZE=18944
 NUM_KEY_VALUE_HEADS=4
-MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
+MAX_POSITION_EMBEDDINGS=131072
 EXTRA_VOCAB_SIZE=293
 RMS_NORM_EPS=1e-6
 gqa_options=" \
@@ -326,8 +334,7 @@ fi
 
 if [ $TE = true ]; then
     te_options=" \
-		    --transformer-impl transformer_engine"
-
+        --transformer-impl transformer_engine"
 elif [ $TE = false ]; then
     te_options=" \
         --transformer-impl local"
@@ -391,13 +398,14 @@ else
     async_save_options=""
 fi
 
-
 if [ $TASK = pretrain ]; then
     task_options=" \
-            --train-mode pretrain "
+            --train-mode pretrain \
+            --online-packing "
 elif [ $TASK = sft ]; then
     task_options=" \
         --train-mode finetune \
+        --online-packing \
         --eod-mask-loss "
 fi
 
@@ -530,6 +538,7 @@ run_cmd="torchrun $DISTRIBUTED_ARGS run_qwen.py
  ${virtual_pp_options} \
  ${swa_options} \
  ${tie_option} \
+ ${te_spec_options} \
  --no-create-attention-mask-in-dataloader \
  2>&1 | tee ${LOG_FILE}
  "

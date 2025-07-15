@@ -616,4 +616,13 @@ def get_patch_args(parser):
                     help='Enable MFU logging to tensorboard.')
     group.add_argument('--mfu-base-value', type=int, default=312,
                     help='The denominator when calculating the MFU. Default 312')
+    group.add_argument('--online-packing',
+                    action='store_true',
+                    help='If set, dataloader tokenize and packing datasets online')
+    group.add_argument('--te-spec-version',
+                    type=str,
+                    choices=["base", "tqlm"],
+                    default="base",
+                    help="support base or tqlm, base uses mcore-0.10, "
+                    "tqlm uses mcore-0.11 and fuses input_layernorm and linear_qkv")
     return parser

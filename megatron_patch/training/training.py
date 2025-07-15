@@ -218,6 +218,7 @@ def pretrain(
     get_embedding_ranks=None,
     get_position_embedding_ranks=None,
     non_loss_data_func=None,
+    dataloader_provider=None,
 ):
     """Main training program.
 
@@ -326,14 +327,16 @@ def pretrain(
         for i in range(len(model)):
             mpu.set_virtual_pipeline_model_parallel_rank(i)
             iterators = build_train_valid_test_data_iterators(
-                train_valid_test_dataset_provider)
+                train_valid_test_dataset_provider,
+                dataloader_provider)
             train_data_iterator.append(iterators[0])
             valid_data_iterator.append(iterators[1])
             test_data_iterator.append(iterators[2])
     else:
         train_data_iterator, valid_data_iterator, test_data_iterator \
             = build_train_valid_test_data_iterators(
-                train_valid_test_dataset_provider)
+                train_valid_test_dataset_provider,
+                dataloader_provider)
     timers('train/valid/test-data-iterators-setup').stop()
     print_datetime('after dataloaders are built')
     app_metrics['app_build_dataiters_finish_time'] = one_logger_utils.get_timestamp_in_ms()
@@ -694,9 +697,16 @@ def setup_model_and_optimizer(model_provider_func,
         })
         timers('load-checkpoint', log_level=0).start(barrier=True)
 
-        args.iteration, args.num_floating_point_operations_so_far = load_checkpoint(
-                model, optimizer, opt_param_scheduler,
-                ft_client=ft_integration.get_rank_monitor_client(), checkpointing_context=checkpointing_context)
+        import megatron.core as mcore
+        if mcore.__version__ == '0.10.0':
+            args.iteration, args.num_floating_point_operations_so_far = load_checkpoint(
+                    model, optimizer, opt_param_scheduler,
+                    ft_client=ft_integration.get_rank_monitor_client(), checkpointing_context=checkpointing_context)
+        else:
+            args.iteration, args.num_floating_point_operations_so_far = load_checkpoint(
+                    model, optimizer, opt_param_scheduler,
+                    checkpointing_context=checkpointing_context)
+
         timers('load-checkpoint').stop(barrier=True)
         timers.log(['load-checkpoint'])
         one_logger and one_logger.log_metrics({
@@ -1720,7 +1730,8 @@ def build_train_valid_test_datasets(build_train_valid_test_datasets_provider):
 
 
 def build_train_valid_test_data_loaders(
-        build_train_valid_test_datasets_provider):
+        build_train_valid_test_datasets_provider,
+        dataloader_povider=None):
     """Build pretraining data loaders."""
 
     args = get_args()
@@ -1741,7 +1752,9 @@ def build_train_valid_test_data_loaders(
 
     # Rely on distributed-aware core datasets, temporary
     is_distributed = getattr(build_train_valid_test_datasets_provider, "is_distributed", False)
-
+    dataloader_povider_fn = build_pretraining_data_loader
+    if dataloader_povider is not None:
+        dataloader_povider_fn = dataloader_povider
     # Construct the data pipeline
     if is_distributed or mpu.get_tensor_model_parallel_rank() == 0:
 
@@ -1749,14 +1762,14 @@ def build_train_valid_test_data_loaders(
         train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
             build_train_valid_test_datasets_provider)
         # Build dataloders.
-        train_dataloader = build_pretraining_data_loader(
+        train_dataloader = dataloader_povider_fn(
             train_ds, args.consumed_train_samples)
         if args.skip_train:
-            valid_dataloader = build_pretraining_data_loader(valid_ds, 0)
+            valid_dataloader = dataloader_povider_fn(valid_ds, 0)
         else:
-            valid_dataloader = build_pretraining_data_loader(
+            valid_dataloader = dataloader_povider_fn(
                 valid_ds, args.consumed_valid_samples)
-        test_dataloader = build_pretraining_data_loader(test_ds, 0)
+        test_dataloader = dataloader_povider_fn(test_ds, 0)
 
         # Flags to know if we need to do training/validation/testing.
         do_train = train_dataloader is not None and args.train_iters > 0
@@ -1778,7 +1791,8 @@ def build_train_valid_test_data_loaders(
 
 
 def build_train_valid_test_data_iterators(
-        build_train_valid_test_datasets_provider):
+        build_train_valid_test_datasets_provider,
+        dataloader_provider=None):
     """Build pretraining data iterators."""
 
     args = get_args()
@@ -1786,7 +1800,8 @@ def build_train_valid_test_data_iterators(
     # Build loaders.
     train_dataloader, valid_dataloader, test_dataloader = \
         build_train_valid_test_data_loaders(
-            build_train_valid_test_datasets_provider)
+            build_train_valid_test_datasets_provider,
+            dataloader_provider)
 
     # Build iterators.
     dl_type = args.dataloader_type

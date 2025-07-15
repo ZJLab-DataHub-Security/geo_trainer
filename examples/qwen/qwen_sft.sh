@@ -5,12 +5,19 @@ ENV=dsw
 ROOT_DIR=$( dirname -- "$( readlink -f -- "$0"; )"; )
 ROOT_DIR=${ROOT_DIR}/../..
 echo $ROOT_DIR
-
 MEGATRON_PATH=/workspace/Megatron-LM/
+USE_TQLM=${USE_TQLM:-false}
+te_spec_options=""
+if [ $USE_TQLM = true ]; then
+    MEGATRON_PATH=/workspace/Megatron-LM-0.11.0/
+    te_spec_options=" \
+            --te-spec-version tqlm \
+	    --attention-backend flash"
+fi
 export PYTHONPATH=${MEGATRON_PATH}:${ROOT_DIR}
 MODEL_SIZE=${MODEL_SIZE:-7B}
 BATCH_SIZE=1
-GLOBAL_BATCH_SIZE=${GLOBAL_BATCH_SIZE:-4}
+GLOBAL_BATCH_SIZE=${GLOBAL_BATCH_SIZE:-32}
 LR=2e-5
 MIN_LR=1e-6
 SEQ_LEN=${SEQ_LEN:-32768}
@@ -101,7 +108,7 @@ if [ $DATASET_TYPE = mmap ]; then
     dataset_type_options=" \
 		    --dataset LLama-Pretrain-Idxmap \
             --data-path ${DATASET_PATH} \
-            --split 50,50,0 "
+            --split 99,1,0 "
 elif [ $DATASET_TYPE = raw ]; then
     dataset_type_options=" \
         --train-data-path ${DATASET_PATH} \
@@ -325,9 +332,8 @@ elif [ $FL = false ]; then
 fi
 
 if [ $TE = true ]; then
-te_options=" \
-        --transformer-impl transformer_engine"
-
+    te_options=" \
+	--transformer-impl transformer_engine"
 elif [ $TE = false ]; then
     te_options=" \
         --transformer-impl local"
@@ -394,10 +400,12 @@ fi
 
 if [ $TASK = pretrain ]; then
     task_options=" \
-            --train-mode pretrain "
+            --train-mode pretrain \
+	    --online-packing "
 elif [ $TASK = sft ]; then
     task_options=" \
         --train-mode finetune \
+	--online-packing \
         --eod-mask-loss "
 fi
 
@@ -448,6 +456,7 @@ fi
 
 megatron_options="  \
         --lr ${LR} \
+        --min-lr ${MIN_LR} \
         --lr-decay-style ${LR_DECAY_STYLE} \
         --adam-beta1 0.9 \
         --adam-beta2 0.95 \
@@ -493,9 +502,9 @@ megatron_options="  \
         --rotary-percent 1.0 \
         --rotary-base ${ROPE_THETA} \
         --rotary-seq-len-interpolation-factor 1 \
+        --calculate-per-token-loss \
         --no-gradient-accumulation-fusion \
         --log-mfu \
-        --calculate-per-token-loss \
         --mfu-base-value 312 \
         "
 
@@ -527,6 +536,7 @@ run_cmd="torchrun $DISTRIBUTED_ARGS run_qwen.py
  ${virtual_pp_options} \
  ${swa_options} \
  ${tie_option} \
+ ${te_spec_options} \
  2>&1 | tee ${LOG_FILE}
  "
 echo ${run_cmd}
