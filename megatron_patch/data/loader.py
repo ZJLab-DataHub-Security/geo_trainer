@@ -33,7 +33,9 @@ def index_loop(index_queues, sampler_iter, num_workers, prefetch_factor,
             try:
                 index=next(sampler_iter)
             except StopIteration:
-                return
+                index_queue.put((send_idx, _IterableDatasetStopIteration(worker_queue_idx)))
+                done_event.set()
+                break
             index_queue.put((send_idx, index))
             task_info[send_idx] = (worker_queue_idx,)
             send_idx += 1
@@ -136,28 +138,34 @@ def worker_loop(dataset_kind, dataset, index_queue, prefetch_factor, data_queue,
                 # (None) yet. I will keep continuing until get it, and skip the
                 # processing steps.
                 continue
-            idx, index = r
-            data: Union[_IterableDatasetStopIteration, ExceptionWrapper]
-            if init_exception is not None:
-                data = init_exception
-                init_exception = None
             else:
-                data = fetcher.fetch(index)
-                try:
-                    data = fetcher.fetch(index)  # type: ignore[possibly-undefined]
-                except Exception as e:
-                    if isinstance(e, StopIteration) and dataset_kind == _DatasetKind.Iterable:
-                        data = _IterableDatasetStopIteration(worker_id)
-                        # Set `iteration_end`
-                        #   (1) to save future `next(...)` calls, and
-                        #   (2) to avoid sending multiple `_IterableDatasetStopIteration`s.
-                        iteration_end = True
-                    else:
-                        # It is important that we don't store exc_info in a variable.
-                        # `ExceptionWrapper` does the correct thing.
-                        # See NOTE [ Python Traceback Reference Cycle Problem ]
-                        data = ExceptionWrapper(
-                            where=f"in DataLoader worker process {worker_id}")
+                idx, index = r
+                data: Union[_IterableDatasetStopIteration, ExceptionWrapper]
+                if init_exception is not None:
+                    data = init_exception
+                    init_exception = None
+                elif isinstance(index, _IterableDatasetStopIteration):
+                    data = _IterableDatasetStopIteration(worker_id)
+                    iteration_end = True
+                    data_queue.put((idx, data))
+                    continue
+                else:
+                    data = fetcher.fetch(index)
+                    try:
+                        data = fetcher.fetch(index)  # type: ignore[possibly-undefined]
+                    except Exception as e:
+                        if isinstance(e, StopIteration) and dataset_kind == _DatasetKind.Iterable:
+                            data = _IterableDatasetStopIteration(worker_id)
+                            # Set `iteration_end`
+                            #   (1) to save future `next(...)` calls, and
+                            #   (2) to avoid sending multiple `_IterableDatasetStopIteration`s.
+                            iteration_end = True
+                        else:
+                            # It is important that we don't store exc_info in a variable.
+                            # `ExceptionWrapper` does the correct thing.
+                            # See NOTE [ Python Traceback Reference Cycle Problem ]
+                            data = ExceptionWrapper(
+                                where=f"in DataLoader worker process {worker_id}")
             if len(concating_data) == 0:
                 for key in data:
                     concating_data[key]=[]
@@ -323,14 +331,14 @@ class DataConcatingMultiProcessingDataLoaderIter(_MultiProcessingDataLoaderIter)
     def _next_data(self):
         while True:
             idx, data = self._get_data()
-            if self._dataset_kind == _DatasetKind.Iterable:
-                # Check for _IterableDatasetStopIteration
-                if isinstance(data, _utils.worker._IterableDatasetStopIteration):
-                    if self._persistent_workers:
-                        self._workers_status[data.worker_id] = False
-                    else:
-                        self._mark_worker_as_unavailable(data.worker_id)
-                    continue
+            # Check for _IterableDatasetStopIteration
+            if isinstance(data, _utils.worker._IterableDatasetStopIteration):
+                if self._persistent_workers:
+                    self._workers_status[data.worker_id] = False
+                else:
+                    self._mark_worker_as_unavailable(data.worker_id)
+                    self._shutdown_workers()
+                raise StopIteration
 
             return convert_result_list_to_tensor(data)
 
