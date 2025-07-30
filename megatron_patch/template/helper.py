@@ -32,6 +32,7 @@ from megatron.core.packed_seq_params import PackedSeqParams
 from megatron_patch.data.utils import (
     get_batch_on_this_tp_rank_original,
     get_batch_on_this_tp_rank_idxmap_sft,
+    get_batch_on_this_tp_rank_online_packing,
     get_position_id_on_this_tp_rank_idxmap_sft_packing
 )
 
@@ -65,6 +66,20 @@ def get_batch(data_iterator):
 
         return None, None, None, None, None, None, packed_seq_params
 
+    if args.online_packing:
+        batch = get_batch_on_this_tp_rank_online_packing(data_iterator)
+        num_seqs = batch.pop('num_seqs')
+        # slice batch along sequence dimension for context parallelism
+        batch = get_batch_on_this_cp_rank(batch)
+        return (
+            batch['tokens'],
+            batch['labels'],
+            batch['loss_mask'],
+            batch['attention_mask'],
+            batch['position_ids'],
+            num_seqs,
+            None
+        )
     if args.dataset == 'JSON-SFT':
         if args.train_mode == "pretrain":
             raise ValueError('The JSON-SFT dataset should only be used for finetuning!')

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import numpy as np
+import datasets
 try:
     # <= 240126
     from megatron import (
@@ -101,6 +102,9 @@ def build_dataset(args, train_val_test_num_samples):
     from megatron.core.datasets.blended_megatron_dataset_builder import (
         BlendedMegatronDatasetBuilder,
     )
+    if args.online_packing:
+        ds = datasets.load_dataset('text', data_files=args.train_data_path or args.data_path, split='train')
+        return ds, ds, ds
     if get_tokenizer() is None:
         build_tokenizer(args)
     if args.dataset == 'JSON-SFT':

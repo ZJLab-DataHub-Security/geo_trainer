@@ -30,7 +30,7 @@ CP=1
 SP=true
 DO=true
 FL=true
-SFT=true
+SFT=false
 # MP_PP0_LAYERS=0
 ### PARALLEL / BOOL OPTION ###
 
@@ -42,12 +42,12 @@ MP_AC_LAYERS=${MP_AC_LAYERS:-1}
 OPTIMIZER_OFFLOAD=${OPTIMIZER_OFFLOAD:-false}
 SAVE_INTERVAL=${SAVE_INTERVAL:-100}
 PRETRAIN_CHECKPOINT_PATH=${PRETRAIN_CHECKPOINT_PATH:-/mnt/zj-gpfs/home/qianhao/models/mcore_qwen3_a3b_t4_e8/}
-#DATASET_PATH=${DATASET_PATH:-/mnt/zj-gpfs/home/qianhao/data/qwen3_32b_sample_long_sft_32k_pack_text_document}
-DATASET_PATH=${DATASET_PATH:-/mnt/zj-gpfs/home/qianhao/data/tianqing-sample/sft-sample.jsonl}
+#DATASET_PATH=${DATASET_PATH:-/mnt/zj-gpfs/home/qianhao/data/mmap_qwen3_datasets_text_document}
+DATASET_PATH=${DATASET_PATH:-/mnt/zj-gpfs/home/qianhao/data/tianqing-sample/cpt-sample.jsonl}
 VALID_DATASET_PATH=${DATASET_PATH}
 
-MP_SFT_PACKING=true
-CPT_CONTINUE=false
+MP_SFT_PACKING=false
+CPT_CONTINUE=true
 
 # the following two values will not be used when SFT is true
 TRAIN_SAMPLES=${TRAIN_SAMPLES:-2000} 
@@ -427,7 +427,6 @@ else
         --dataset MMAP \
         --split 99,1,0 "
 fi
-
 if [ ${ONLINE_PACKING} = true ]; then
     packing_options=" \
       --online-packing "
@@ -483,7 +482,7 @@ megatron_options="  \
         --attention-dropout 0.0 \
         --hidden-dropout 0.0 \
         --lr-warmup-fraction 0.1 \
-	--train-samples ${TRAIN_SAMPLES} \
+        --train-samples ${TRAIN_SAMPLES}
         --micro-batch-size ${BATCH_SIZE} \
         --global-batch-size ${GLOBAL_BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
