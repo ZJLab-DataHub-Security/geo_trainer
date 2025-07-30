@@ -15,14 +15,14 @@ sft:
 cd examples/qwen
 bash qwen3_sft.sh
 ```
-在示例中给出的是qwen3在32k数据长度下使用TP=4, EP=8训练qwen3-30b-a3b的示例脚本
-以下常见的配置可通过用户设置环境变量来配置：
-模型权重path：PRETRAIN_CHECKPOINT_PATH
-数据path: DATASET_PATH
-数据长度： SEQ_LEN
-是否采用online_packing: ONLINE_PACKING (true/false)
-重计算： AC (full, selective, none)
-并行配置：TP, PP, EP, CP, SP
+在示例中给出的是qwen3在32k数据长度下使用TP=4, EP=8训练qwen3-30b-a3b的示例脚本  
+以下常见的配置可通过用户设置环境变量来配置：  
+模型权重path：PRETRAIN_CHECKPOINT_PATH  
+数据path: DATASET_PATH  
+数据长度： SEQ_LEN  
+是否采用online_packing: ONLINE_PACKING (true/false)  
+重计算： AC (full, selective, none)  
+并行配置：TP, PP, EP, CP, SP  
 
 
 ## 权重转换脚本：
