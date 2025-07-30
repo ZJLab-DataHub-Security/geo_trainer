@@ -1,6 +1,6 @@
 # concerto
 ## 环境：
-镜像地址：tqcr/tangxb/concerto:mcore-0.12.2 
+镜像地址：tqcr/tangxb/concerto:mcore-0.12.2  
 算法库：concerto  
 
 ## 训练脚本：
