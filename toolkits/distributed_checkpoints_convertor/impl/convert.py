@@ -4,6 +4,7 @@ import time
 
 from importlib import import_module
 from functools import partial
+from xmegatron_ext import megatron_xpu_init
 # NOTE: Some models (e.g., moonlight) adopts a customed tokenizer, which 
 # requires trust_remote_code=True
 from megatron.training import global_vars

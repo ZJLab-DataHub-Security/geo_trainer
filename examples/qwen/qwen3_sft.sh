@@ -6,7 +6,7 @@ ROOT_DIR=$( dirname -- "$( readlink -f -- "$0"; )"; )
 ROOT_DIR=${ROOT_DIR}/../.. #v5000_megatron
 echo $ROOT_DIR
 
-MEGATRON_PATH=/workspace/Megatron-LM
+MEGATRON_PATH=/workspace/KLX-Megatron/
 #export LD_LIBRARY_PATH=/mnt/v5000-megatron/v5000-megatron/liusong/output/so:$LD_LIBRARY_PATH
 export PYTHONPATH=${PYTHONPATH}:${ROOT_DIR}:${MEGATRON_PATH}
 
@@ -37,8 +37,8 @@ SFT=true
 ### OTHERS ###
 AC=${AC:-full}
 ONLINE_PACKING=${ONLINE_PACKING:-true}
-RECOMPUTE_METHOD=${RECOMPUTE_METHOD:-uniform}
-MP_AC_LAYERS=${MP_AC_LAYERS:-1}
+RECOMPUTE_METHOD=${RECOMPUTE_METHOD:-block}
+MP_AC_LAYERS=${MP_AC_LAYERS:-46}
 OPTIMIZER_OFFLOAD=${OPTIMIZER_OFFLOAD:-false}
 SAVE_INTERVAL=${SAVE_INTERVAL:-100}
 PRETRAIN_CHECKPOINT_PATH=${PRETRAIN_CHECKPOINT_PATH:-/mnt/zj-gpfs/home/qianhao/models/mcore_qwen3_a3b_t4_e8/}

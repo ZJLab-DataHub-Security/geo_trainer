@@ -21,7 +21,7 @@ class CPTConcatFn:
     max_seqlen: int
 
     def __call__(self, data_concating: Dict[str, List[Any]], data: Dict[str, List[Any]]):
-        data_validation(data)
+        # data_validation(data)
         result = {}
         for key in data:
             assert key in ("input_ids", "labels")

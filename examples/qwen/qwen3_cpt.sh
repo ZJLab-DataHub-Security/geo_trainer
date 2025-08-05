@@ -6,12 +6,12 @@ ROOT_DIR=$( dirname -- "$( readlink -f -- "$0"; )"; )
 ROOT_DIR=${ROOT_DIR}/../.. #v5000_megatron
 echo $ROOT_DIR
 
-MEGATRON_PATH=/workspace/Megatron-LM
+MEGATRON_PATH=/workspace/Megatron-LM/
 #export LD_LIBRARY_PATH=/mnt/v5000-megatron/v5000-megatron/liusong/output/so:$LD_LIBRARY_PATH
 export PYTHONPATH=${PYTHONPATH}:${ROOT_DIR}:${MEGATRON_PATH}
 
 ### BASE CONFIG ###
-MODEL_SIZE=A3B
+MODEL_SIZE=${MODEL_SIZE:-A3B}
 BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=${GLOBAL_BATCH_SIZE:-32}
 LR=1e-5
@@ -36,14 +36,16 @@ SFT=false
 
 ### OTHERS ###
 AC=${AC:-full}
-ONLINE_PACKING=${ONLINE_PACKING:-true}
-RECOMPUTE_METHOD=${RECOMPUTE_METHOD:-uniform}
-MP_AC_LAYERS=${MP_AC_LAYERS:-1}
+ONLINE_PACKING=${ONLINE_PACKING:-false}
+RECOMPUTE_METHOD=${RECOMPUTE_METHOD:-block}
+MP_AC_LAYERS=${MP_AC_LAYERS:-46}
 OPTIMIZER_OFFLOAD=${OPTIMIZER_OFFLOAD:-false}
 SAVE_INTERVAL=${SAVE_INTERVAL:-100}
-PRETRAIN_CHECKPOINT_PATH=${PRETRAIN_CHECKPOINT_PATH:-/mnt/zj-gpfs/home/qianhao/models/mcore_qwen3_a3b_t4_e8/}
+PRETRAIN_CHECKPOINT_PATH=${PRETRAIN_CHECKPOINT_PATH:-/mnt/geogpt-training/home/qianhao/models/megatron_ckpt/mcore_qwen3_a3b_t4_e8/}
 #DATASET_PATH=${DATASET_PATH:-/mnt/zj-gpfs/home/qianhao/data/mmap_qwen3_datasets_text_document}
-DATASET_PATH=${DATASET_PATH:-/mnt/zj-gpfs/home/qianhao/data/tianqing-sample/cpt-sample.jsonl}
+#DATASET_PATH=${DATASET_PATH:-/mnt/geogpt-training/home/qianhao/data/cpt-sample.jsonl}
+#DATASET_PATH=${DATASET_PATH:-/mnt/geogpt-training/home/john.ly/datasets/data-cpt/common-cpt-exp-5B.jsonl}
+DATASET_PATH=${DATASET_PATH:-/mnt/geogpt-training/home/qianhao/data/mmap_qwen3_datasets_text_document}
 VALID_DATASET_PATH=${DATASET_PATH}
 
 MP_SFT_PACKING=false

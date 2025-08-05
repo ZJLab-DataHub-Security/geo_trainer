@@ -8,7 +8,8 @@ import threading
 import itertools
 from typing import Union
 import torch
-import torch.multiprocessing as multiprocessing
+#import torch.multiprocessing as multiprocessing
+import multiprocessing
 from torch._utils import ExceptionWrapper
 from torch.utils.data import SequentialSampler, IterDataPipe, MapDataPipe, _utils
 from torch.utils.data.dataloader import DataLoader, _BaseDataLoaderIter, _MultiProcessingDataLoaderIter, _DatasetKind, _sharding_worker_init_fn
@@ -39,6 +40,8 @@ def index_loop(index_queues, sampler_iter, num_workers, prefetch_factor,
             index_queue.put((send_idx, index))
             task_info[send_idx] = (worker_queue_idx,)
             send_idx += 1
+        else:
+            time.sleep(0.05)
 
 def worker_loop(dataset_kind, dataset, index_queue, prefetch_factor, data_queue, done_event,
                  auto_collation, collate_fn, drop_last, base_seed, init_fn, worker_id,
@@ -110,6 +113,7 @@ def worker_loop(dataset_kind, dataset, index_queue, prefetch_factor, data_queue,
         concating_data = {}
         while watchdog.is_alive():
             if data_queue.qsize() > prefetch_factor:
+                time.sleep(0.05)
                 continue
             try:
                 r = index_queue.get(timeout=MP_STATUS_CHECK_INTERVAL)
@@ -150,7 +154,6 @@ def worker_loop(dataset_kind, dataset, index_queue, prefetch_factor, data_queue,
                     data_queue.put((idx, data))
                     continue
                 else:
-                    data = fetcher.fetch(index)
                     try:
                         data = fetcher.fetch(index)  # type: ignore[possibly-undefined]
                     except Exception as e:
@@ -340,7 +343,8 @@ class DataConcatingMultiProcessingDataLoaderIter(_MultiProcessingDataLoaderIter)
                     self._shutdown_workers()
                 raise StopIteration
 
-            return convert_result_list_to_tensor(data)
+            result = convert_result_list_to_tensor(data)
+            return result
 
     def _shutdown_workers(self):
         super()._shutdown_workers()

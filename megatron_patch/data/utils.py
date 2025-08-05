@@ -21,6 +21,10 @@ except:
 
 from megatron_patch.tokenizer import get_tokenizer
 
+_ATTN_MASK=None
+_LOSS_MASK=None
+_POS_IDS=None
+
 def get_ltor_masks_and_position_ids(data,
                                     eod_token,
                                     reset_position_ids,
@@ -85,6 +89,29 @@ def get_ltor_masks_and_position_ids(data,
 
     return attention_mask, loss_mask, position_ids
 
+def get_attn_mask_loss_mask_pos_ids(data,
+                                    eod_token,
+                                    reset_position_ids,
+                                    reset_attention_mask,
+                                    eod_mask_loss,
+                                    create_attention_mask: bool=True):
+
+    global _ATTN_MASK
+    global _LOSS_MASK
+    global _POS_IDS
+    if _ATTN_MASK is None or _LOSS_MASK is None or _POS_IDS is None:
+        _ATTN_MASK, _LOSS_MASK, _POS_IDS = get_ltor_masks_and_position_ids(
+                data,
+                eod_token,
+                reset_position_ids,
+                reset_attention_mask,
+                eod_mask_loss,
+                create_attention_mask)
+    loss_mask = _LOSS_MASK
+    if eod_mask_loss:
+        loss_mask[data == eod_token] = 0.0
+    return _ATTN_MASK, loss_mask, _POS_IDS
+
 def get_ltor_position_ids_packed_seq(data):
     """
         Given a input_seqs from custom mmap dataset, generate a 
@@ -127,7 +154,6 @@ def get_batch_on_this_tp_rank_online_packing(data_iterator, per_seq_average=Fals
             )
 
     if mpu.get_tensor_model_parallel_rank() == 0:
-
         if isinstance(data_iterator, dict):
             data = data_iterator
         else:
@@ -140,7 +166,7 @@ def get_batch_on_this_tp_rank_online_packing(data_iterator, per_seq_average=Fals
         # labels[labels == tokenizer.eos_token_id] = -100
         labels[labels == tokenizer.pad_token_id] = -100
 
-        attention_mask, loss_mask, _ = get_ltor_masks_and_position_ids(
+        attention_mask, loss_mask, _ = get_attn_mask_loss_mask_pos_ids(
             labels,
             -100,
             args.reset_position_ids,
@@ -234,7 +260,6 @@ def get_batch_on_this_tp_rank_online_packing(data_iterator, per_seq_average=Fals
             'position_ids': position_ids,
             'num_seqs': num_seqs
         }
-
     return batch
 
 def get_batch_on_this_tp_rank_original(data_iterator, per_seq_average=False):

@@ -2,9 +2,9 @@
 set -e
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 CONVERTOR_DIR=$( dirname $( dirname ${CURRENT_DIR}))
-MEGATRON_PATH=$( dirname $( dirname ${CONVERTOR_DIR}))
+MEGATRON_PATH=/workspace/KLX-Megatron
 
-export PYTHONPATH=${CONVERTOR_DIR}/impl:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250328:$PYTHONPATH
+export PYTHONPATH=${CONVERTOR_DIR}/impl:${MEGATRON_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true # for PyTorch >= 2.6
 
@@ -102,6 +102,7 @@ GPT_MODEL_ARGS=(
 )
 
 if [ $MODEL_SIZE = A22B ]; then
+        # --moe-grouped-gemm
     GPT_MODEL_ARGS+=(
         --num-layers 94
         --hidden-size 4096
@@ -109,19 +110,21 @@ if [ $MODEL_SIZE = A22B ]; then
         --moe-ffn-hidden-size 1536
         --num-attention-heads 64
         --untie-embeddings-and-output-weights
-        --moe-grouped-gemm
         --moe-router-score-function softmax
         --moe-token-dispatcher-type alltoall
         --moe-router-topk 8
         --moe-layer-freq "'([1]*94)'"
         --num-experts 128
         --num-query-groups 4
+	--decoder-first-pipeline-num-layers 10
     )
     if [ -z  ${MODEL_PARALLEL_ARGS} ]; then
         MODEL_PARALLEL_ARGS=(
-            --tensor-model-parallel-size 1
-            --pipeline-model-parallel-size 2
+            --tensor-model-parallel-size 4
+            --pipeline-model-parallel-size 8
             --expert-model-parallel-size 8
+            --expert-tensor-parallel-size 1
+	    --sequence-parallel
         )
     fi
 fi

@@ -1,0 +1,1 @@
+bash run_make_pretraining_dataset_megatron.sh /mnt/geogpt-training/home/john.ly/datasets/data-cpt/common-cpt-exp-5B.jsonl Qwen3Tokenizer text /mnt/geogpt-training/home/qianhao/data/ /mnt/v5000-megatron/v5000-megatron/model/Qwen3-30B-A3B/

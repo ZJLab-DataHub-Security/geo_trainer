@@ -1,0 +1,1 @@
+MODEL_SIZE=A22B MP_PP0_LAYERS=10 RECOMPUTE_METHOD=uniform MP_AC_LAYERS=1 PRETRAIN_CHECKPOINT_PATH=/mnt/geogpt-training/home/qianhao/models/megatron_ckpt/mcore_qwen3_a22b_t4_p8_e8 TP=4 PP=8 EP=8 ETP=1 GLOBAL_BATCH_SIZE=128 bash qwen3_cpt.sh
