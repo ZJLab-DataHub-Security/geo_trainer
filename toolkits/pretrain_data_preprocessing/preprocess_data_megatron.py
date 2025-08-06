@@ -94,7 +94,7 @@ class Encoder(object):
                     continue
                 
                 if len(sentence_ids) > 0:
-                    self.total_token_count += len(sentence_ids)  # increase total token
+                    self.total_token_count = len(sentence_ids)  # increase total token
                     doc_ids.extend(sentence_ids)
                     sentence_lens.append(len(sentence_ids))
             if len(doc_ids) > 0 and self.args.append_eod:
