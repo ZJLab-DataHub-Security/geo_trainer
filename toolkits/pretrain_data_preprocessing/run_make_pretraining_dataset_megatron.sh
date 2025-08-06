@@ -3,7 +3,7 @@ START_TIME=$SECONDS
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:/workspace/Megatron-LM/core_r0_12_0/
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:/workspace/Megatron-LM/
 
 #source activate python310_torch25_cuda
 
