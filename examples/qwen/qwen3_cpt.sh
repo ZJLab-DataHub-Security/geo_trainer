@@ -217,8 +217,8 @@ elif [ $MODEL_SIZE = A3B ]; then
     ROUTER_TOPK=8
     RMS_NORM_EPS=1e-6
 
-    #--moe-grouped-gemm \
     moe_options=" \
+    	--moe-grouped-gemm \
         --moe-token-dispatcher-type alltoall \
         --moe-router-topk ${ROUTER_TOPK} \
         --num-experts ${NUM_EXPERTS} \
@@ -251,8 +251,8 @@ elif [ $MODEL_SIZE = A22B ]; then
     ROUTER_TOPK=8
     RMS_NORM_EPS=1e-6
 
-    #--moe-grouped-gemm \
     moe_options=" \
+    	--moe-grouped-gemm \
         --moe-token-dispatcher-type alltoall \
         --moe-router-topk ${ROUTER_TOPK} \
         --num-experts ${NUM_EXPERTS} \
@@ -395,7 +395,8 @@ fi
 
 if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
     load_option=" \
-            --load $PRETRAIN_CHECKPOINT_PATH"
+            --load $PRETRAIN_CHECKPOINT_PATH \
+	    --auto-detect-ckpt-format"
 fi
 
 if [ $OPTIMIZER_OFFLOAD != false ]; then
@@ -437,7 +438,8 @@ elif [ ${MP_SFT_PACKING} = true ]; then
       --reset-position-ids \
       --no-create-attention-mask-in-dataloader "
 else
-    packing_options=""
+    packing_options=" \
+      --no-create-attention-mask-in-dataloader "
 fi
 
 ##### Prepare logdirs #######
@@ -466,6 +468,7 @@ if [ -z ${CPT_CONTINUE} ] || [ ${CPT_CONTINUE} = false ]; then
      --no-load-rng "
 elif [ ${CPT_CONTINUE} = true ];  then
     cpt_continue_options="\
+	--no-load-optim \
         --no-load-rng "
 fi
 
@@ -525,6 +528,7 @@ megatron_options="  \
         --qk-layernorm \
         --kv-channels 128 \
         --use-cpu-initialization \
+	--no-gradient-accumulation-fusion \
         "
 
 if [[ -z ${LOG_FILE} ]];then
